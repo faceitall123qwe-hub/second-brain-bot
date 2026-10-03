@@ -1,30 +1,60 @@
+<div align="center">
+
 # second-brain-bot
 
-Personal Telegram capture bot: send a voice note, text or photo, pick a type
-(idea / task / note / todo / date), get an LLM-structured preview, approve, and it
-lands in Notion — tasks in a database with due dates, ideas and notes as pages.
+**Capture ideas, tasks and notes by voice, text or photo in Telegram — structured by an LLM, approved by you, saved to Notion.**
 
+[![CI](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![Telegram](https://img.shields.io/badge/python--telegram--bot_21-26A5E4?logo=telegram&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-Whisper_%2B_Llama-F55036)
+![Notion](https://img.shields.io/badge/Notion_API-000?logo=notion&logoColor=white)
+![Security](https://img.shields.io/badge/threat_model-documented-2ea44f)
+
+</div>
+
+---
+
+## Flow
+
+```mermaid
+sequenceDiagram
+    actor U as Owner (Telegram)
+    participant B as Bot
+    participant G as Groq
+    participant N as Notion
+    U->>B: voice / text / photo
+    Note over B: allowlist check — strangers are ignored
+    B->>G: Whisper large-v3 (voice) or Llama vision (photo)
+    G-->>B: transcript / description
+    B->>U: pick type: Idea · Task · Note · Todo · Date
+    U->>B: Task
+    B->>G: Llama 3.3 70B, JSON mode, per-type schema
+    G-->>B: {title, description, due_date, priority}
+    B->>U: preview + [Save] [Redo] [Cancel]
+    U->>B: Save
+    B->>N: tasks DB (with due date) or projects page
 ```
-Telegram (voice / text / photo)
-   │  owner allowlist
-   ▼
-Groq Whisper large-v3 ── voice → text
-Groq Llama vision ────── photo → description + OCR
-   ▼
-type picker → Llama 3.3 70B (JSON mode, per-type schema) → preview
-   ▼
-[Save] [Redo] [Cancel] ── human approval before any write
-   ▼
-Notion API (tasks DB / projects page)
-```
+
+| Type | Lands in Notion as |
+|---|---|
+| 💡 Idea | Page: summary, potential, next step (as a to-do) |
+| ✅ Task | Database row with due date and priority |
+| 📝 Note | Page with structured markdown and tags |
+| ☑️ Todo | Database row with a checklist |
+| 📅 Date | Database row dated, with time |
+
+Nothing is written until the owner presses **Save** — the LLM only proposes.
 
 ## Run
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env      # fill tokens + ALLOWED_USER_IDS
+cp .env.example .env      # Telegram token, Groq key, Notion token + IDs, ALLOWED_USER_IDS
 python bot.py
 ```
+
+The bot refuses to start without `ALLOWED_USER_IDS` (fail closed).
 
 ## Threat model
 
