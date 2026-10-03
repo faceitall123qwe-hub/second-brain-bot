@@ -1,94 +1,58 @@
-<div align="center">
-
 # second-brain-bot
 
-**Capture ideas, tasks and notes by voice, text or photo in Telegram — structured by an LLM, approved by you, saved to Notion.**
+[![ci](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml)
 
-[![CI](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
-![Telegram](https://img.shields.io/badge/python--telegram--bot_21-26A5E4?logo=telegram&logoColor=white)
-![Groq](https://img.shields.io/badge/Groq-Whisper_%2B_Llama-F55036)
-![Notion](https://img.shields.io/badge/Notion_API-000?logo=notion&logoColor=white)
-![Security](https://img.shields.io/badge/threat_model-documented-2ea44f)
+A Telegram bot I use to get ideas and tasks out of my head and into Notion. I send it a voice
+note, a text or a photo, pick what it is (idea, task, note, todo, date), and it turns it into
+a structured entry. Nothing is saved until I press Save.
 
-</div>
-
----
-
-## Flow
-
-```mermaid
-sequenceDiagram
-    actor U as Owner (Telegram)
-    participant B as Bot
-    participant G as Groq
-    participant N as Notion
-    U->>B: voice / text / photo
-    Note over B: allowlist check — strangers are ignored
-    B->>G: Whisper large-v3 (voice) or Llama vision (photo)
-    G-->>B: transcript / description
-    B->>U: pick type: Idea · Task · Note · Todo · Date
-    U->>B: Task
-    B->>G: Llama 3.3 70B, JSON mode, per-type schema
-    G-->>B: {title, description, due_date, priority}
-    B->>U: preview + [Save] [Redo] [Cancel]
-    U->>B: Save
-    B->>N: tasks DB (with due date) or projects page
+```
+voice / text / photo
+  -> Whisper (voice) or Llama vision (photo), via Groq
+  -> choose type
+  -> Llama 3.3 70B in JSON mode, one schema per type
+  -> preview with [Save] [Redo] [Cancel]
+  -> Notion: tasks go to a database with due date and priority, ideas and notes become pages
 ```
 
-| Type | Lands in Notion as |
-|---|---|
-| 💡 Idea | Page: summary, potential, next step (as a to-do) |
-| ✅ Task | Database row with due date and priority |
-| 📝 Note | Page with structured markdown and tags |
-| ☑️ Todo | Database row with a checklist |
-| 📅 Date | Database row dated, with time |
-
-Nothing is written until the owner presses **Save** — the LLM only proposes.
-
-## Run
+## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env      # Telegram token, Groq key, Notion token + IDs, ALLOWED_USER_IDS
+cp .env.example .env    # Telegram token, Groq key, Notion token and page/database IDs, ALLOWED_USER_IDS
 python bot.py
 ```
 
-The bot refuses to start without `ALLOWED_USER_IDS` (fail closed).
+The bot won't start if `ALLOWED_USER_IDS` is empty.
 
 ## Threat model
 
-The bot holds write credentials to a personal knowledge base and spends paid API
-quota, and it is reachable by anyone who learns its @username. That shapes the model.
+The bot has write access to my Notion and spends paid API quota, and anyone who finds its
+username can message it. That's what this section is about.
 
-### Assets
-- Notion integration token (write access to the shared page and tasks database)
-- Groq API key (billable quota)
-- Personal context from the Obsidian vault, injected into the system prompt
-- Content of the captured notes themselves
+**What needs protecting:** the Notion token, the Groq key, the personal context that's put
+into the system prompt (my "About me" note), and the notes themselves.
 
-### Trust boundaries
-1. Telegram users → bot (untrusted network input)
-2. Bot → third-party LLM/ASR APIs (data leaves the machine)
-3. LLM output → Notion writes (model output is untrusted)
+**Trust boundaries:** Telegram users to the bot; the bot to Groq (data leaves my machine);
+model output to Notion writes (the model's output is untrusted).
 
-### Threats and controls
-
-| Threat | Control |
+| Threat | Mitigation |
 |---|---|
-| Stranger finds the bot and writes to Notion / burns API quota | `ALLOWED_USER_IDS` allowlist on every message **and** callback handler; the bot refuses to start with an empty list (fail closed) |
-| Forged inline-button callbacks from another chat | Callback handlers are wrapped in the same owner check, not only message handlers |
-| Prompt injection in a forwarded message, voice note or image text tries to exfiltrate the personal context or write junk | The model has **no tools** and no network or file access; its only output is a JSON preview shown to the owner, and nothing is written until the owner presses *Save* |
-| Malformed or oversized LLM output | JSON mode + fixed per-type schema; every Notion rich-text field is truncated to the API limit (2000 chars) |
-| Secrets leaking via the repo or logs | Tokens only in `.env` (gitignored); `httpx` logging raised to WARNING because its INFO lines contain the token-bearing Telegram URL |
-| Sensitive notes sent to third parties | Documented trade-off: audio, images and text are processed by Groq. Don't capture anything you wouldn't send to a cloud API |
-| Temp files with voice/photo data left on disk | Downloads go to `tempfile` and are deleted in `finally` after processing |
+| A stranger uses the bot to write to Notion or burn API credits | Allowlist of Telegram user IDs on every message handler and every button callback. Empty allowlist = the bot refuses to start. |
+| Someone triggers inline buttons from another chat | Callback handlers go through the same owner check, not just message handlers |
+| Prompt injection in a forwarded message, voice note or text inside an image | The model has no tools and no network or file access. Its only output is a preview I have to approve before anything is written. |
+| Broken or huge model output | JSON mode with a fixed schema per type; every Notion text field is cut to the API limit |
+| Tokens leaking through logs | `httpx` logging is set to WARNING because at INFO it logs the Telegram URL, which contains the bot token. Secrets live only in `.env`. |
+| Private notes sent to a third party | Accepted: audio, images and text are processed by Groq. I don't send it anything I wouldn't put in a cloud service. |
+| Voice and photo files left on disk | Downloaded to temp files and deleted right after processing |
 
-### Out of scope / known gaps
-- No rate limit per user: acceptable with a single-owner allowlist, required before any
-  multi-user use.
-- Telegram account takeover of the owner = bot takeover; mitigate with Telegram 2FA.
-- No command execution or desktop control by design. If the bot is ever extended with
-  tools that act on the local machine, it needs a separate model: an explicit command
-  allowlist (no free-form shell), per-action confirmation, a sandboxed low-privilege
-  runner, and audit logging.
+**Not covered yet:**
+- No per-user rate limit. Fine with one allowed user, needed before allowing more.
+- If my Telegram account is taken over, so is the bot. Telegram 2FA is the mitigation.
+- The bot can't run commands or control the computer, on purpose. If it ever gets tools that
+  act on the machine, that needs its own design: a fixed list of allowed commands instead of a
+  shell, confirmation for each action, a low-privilege sandbox and an audit log.
+
+## License
+
+MIT
