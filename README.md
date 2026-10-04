@@ -1,6 +1,6 @@
-# second-brain-bot
+# telegram-notion-capture
 
-[![ci](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/faceitall123qwe-hub/second-brain-bot/actions/workflows/ci.yml)
+[![ci](https://github.com/faceitall123qwe-hub/telegram-notion-capture/actions/workflows/ci.yml/badge.svg)](https://github.com/faceitall123qwe-hub/telegram-notion-capture/actions/workflows/ci.yml)
 
 A Telegram bot I use to get ideas and tasks out of my head and into Notion. I send it a voice
 note, a text or a photo, pick what it is (idea, task, note, todo, date), and it turns it into
